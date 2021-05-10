@@ -1,0 +1,12 @@
+{
+  "name": "learnmetro",
+  "displayName": "learnmetro",
+  "expo": {
+    "name": "learnmetro",
+    "slug": "learnmetro",
+    "version": "1.0.0",
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}
