@@ -8,9 +8,14 @@
     "test": "jest"
   },
   "dependencies": {
+    "@mapbox/flow-remove-types": "^2.0.0",
+    "@types/express": "^4.17.11",
+    "esbuild": "^0.11.20",
     "expo": "~41.0.1",
-    "expo-updates": "~0.5.4",
     "expo-splash-screen": "~0.10.2",
+    "expo-updates": "~0.5.4",
+    "express": "^4.17.1",
+    "flow-remove-types": "^2.150.1",
     "react": "16.13.1",
     "react-dom": "16.13.1",
     "react-native": "~0.63.4",
@@ -18,7 +23,9 @@
     "react-native-reanimated": "~2.1.0",
     "react-native-screens": "~3.0.0",
     "react-native-unimodules": "~0.13.3",
-    "react-native-web": "~0.13.12"
+    "react-native-web": "~0.13.12",
+    "sync-directory": "^2.2.20",
+    "ts-node": "^9.1.1"
   },
   "devDependencies": {
     "@babel/core": "^7.9.0",
