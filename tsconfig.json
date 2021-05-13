@@ -3,5 +3,8 @@
   "compilerOptions": {
     "module": "commonjs",
     "strict": true
+  },
+  "ts-node": {
+    "transpileOnly": true
   }
 }

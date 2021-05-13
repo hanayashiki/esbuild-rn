@@ -74,7 +74,7 @@ import fs from 'fs';
         bundle: true,
         plugins: [
             createFlowStripTypePlugin(/node_modules\/react-native.*\.jsx?$/g),
-            rnResolvePlugin,
+            // rnResolvePlugin,
         ],
         loader: {
             '.png': 'file',

@@ -1,9 +1,11 @@
 import { build, Plugin } from 'esbuild';
 // @ts-ignore
-import flowRemoveTypes from '@mapbox/flow-remove-types';
 import path from 'path';
-import fs from 'fs';
 import express from 'express'
+import workerFarm from 'worker-farm';
+import fs from 'fs';
+
+const flowWorkers = workerFarm(require.resolve('./flow-worker'));
 
 const app = express()
 
@@ -25,61 +27,52 @@ require('react-native/Libraries/Core/InitializeCore');
 require('./index');
 `;
 
-app.get('/index.bundle', async (req, res) => {
 
-    const defaultPlatforms = req.query!.platform === 'ios' ? ['ios', 'android', 'native'] : ['android', 'ios', 'native'];
-    const jsExtensions = ['js', 'ts', 'jsx', 'tsx'];
-    
-    const getFilePlatform = (name: string) => {
-        if (/\.ios\.(j|t)sx?$/g.test(name)) {
-            return 'ios';
-        } else if (/\.android\.(j|t)sx?$/g.test(name)) {
-            return 'android';
-        }
-    }
-    
-    const resolvePath = (p: string, importer: string) => {
-        const platforms = getFilePlatform(importer) === 'ios'
-            ? ['ios', 'android', 'native']
-            : getFilePlatform(importer) === 'android'
-                ? ['android', 'ios', 'native']
-                : defaultPlatforms;
-    
-        for (const platform of platforms) {
-            for (const extension of jsExtensions) {
-                if (fs.existsSync(`${p}.${platform}.${extension}`)) {
-                    return `${p}.${platform}.${extension}`;
-                }
-            }
-        }
-    }
-    
-    let rnResolvePlugin: Plugin = {
-        name: 'rnResolvePlugin',
-        setup(build) {
-            // Redirect all paths starting with "images/" to "./public/images/"
-            build.onResolve({ filter: /.*/g }, args => {
-                const resolved = resolvePath(path.join(args.resolveDir, args.path), args.importer);
-                if (resolved) {
-                    return {
-                        path: resolved,
-                    };
-                } else {
-                    return {}
-                }
-            });
-        },
-    }
-    
-    const createFlowStripTypePlugin = (regexp: RegExp): Plugin => ({
-        name: 'createFlowStripTypePlugin',
+if (!fs.existsSync('play/cache')) {
+    fs.mkdirSync('play/cache');
+}
+
+let cache = new Map<string, string>();
+
+if (fs.existsSync('play/cache/cache.json')) {
+    cache = new Map<string, string>(JSON.parse(fs.readFileSync('play/cache/cache.json').toString()));
+}
+
+app.get('/index.bundle', async (req, res) => {
+    const { platform } = req.query! as any;
+
+    let flowTime = 0;
+
+    const createFlowRemoveTypesPlugin = (regexp: RegExp): Plugin => ({
+        name: 'createFlowRemoveTypesPlugin',
         setup(build) {
             build.onLoad({ filter: regexp }, async (args) => {
-                const source = await fs.promises.readFile(args.path, 'utf8');
-                let contents = flowRemoveTypes(source, { pretty: true, all: true }).toString();
-    
-                contents = contents.replace(/static\s+\+/g, 'static ');
-    
+                const relpath = path.relative(process.cwd(), args.path);
+
+                const cacheResult = cache.get(relpath);
+                if (cacheResult) {
+                    return {
+                        contents: cacheResult,
+                        loader: 'jsx',
+                    };
+                } 
+
+                const contents: string = await new Promise((resolve, reject) => {
+                    flowWorkers({
+                        path: relpath,
+                    },
+                    (err: Error | null, content: string) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(content);
+                        }
+                    });
+                });
+
+                cache.set(relpath, contents);
+
+                flowTime += Date.now() - t0;
                 return {
                     contents,
                     loader: 'jsx',
@@ -88,7 +81,9 @@ app.get('/index.bundle', async (req, res) => {
         },
     });
 
-    const result = await build({
+    const t0 = Date.now();
+
+    await build({
         stdin: {
             contents: stdinContent,
             resolveDir: '.',
@@ -98,8 +93,8 @@ app.get('/index.bundle', async (req, res) => {
         outdir: 'play/build',
         bundle: true,
         plugins: [
-            createFlowStripTypePlugin(/node_modules\/react-native.*\.jsx?$/g),
-            rnResolvePlugin,
+            createFlowRemoveTypesPlugin(/node_modules\/react-native\/.*\.jsx?$/g),
+            // rnResolvePlugin,
         ],
         loader: {
             '.png': 'file',
@@ -108,10 +103,28 @@ app.get('/index.bundle', async (req, res) => {
         banner: {
             'js': banner,
         },
+        resolveExtensions: [
+            `.${platform}.tsx`,
+            `.${platform}.ts`,
+            `.${platform}.jsx`,
+            `.${platform}.js`,
+            '.native.tsx',
+            '.native.ts',
+            '.native.jsx',
+            '.native.js',
+            '.tsx',
+            '.ts',
+            '.jsx',
+            '.js',
+        ],
     });
 
     res.setHeader('content-type', 'application/javascript');
     res.sendFile(path.join(__dirname, './build/stdin.js'));
+
+    console.log(`Compiled using ${Date.now() - t0}ms`, `flow: ${flowTime}ms`);
+    
+    fs.writeFileSync('play/cache/cache.json', JSON.stringify([...cache.entries()]));
 })
 
 app.listen(8081, () => {
